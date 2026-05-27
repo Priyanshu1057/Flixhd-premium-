@@ -7,10 +7,10 @@ services:
     startCommand: python bot.py
     healthCheckPath: /
     plan: free
+    pythonVersion: "3.11.0"
     envVars:
-      # ── Required ──────────────────────────────────────────────────────────
       - key: TELEGRAM_BOT_TOKEN
-        sync: false          # Set manually in Render dashboard
+        sync: false
       - key: MONGODB_URI
         sync: false
       - key: ADMIN_CHANNEL_ID
@@ -19,12 +19,10 @@ services:
         sync: false
       - key: UPI_ID
         sync: false
-      # ── Optional but recommended ──────────────────────────────────────────
       - key: LOG_CHANNEL_ID
         sync: false
       - key: SELF_PING_URL
-        sync: false          # Set AFTER first deploy — use the .onrender.com URL
-      # ── Telegram MTProto (leave blank if unused) ──────────────────────────
+        sync: false
       - key: API_ID
         sync: false
       - key: API_HASH
