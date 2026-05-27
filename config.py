@@ -18,7 +18,7 @@ LOG_CHANNEL_ID = int(_log_channel_raw) if _log_channel_raw else None
 # e.g. https://your-bot.onrender.com  or  https://your-bot.koyeb.app
 SELF_PING_URL = os.environ.get("SELF_PING_URL", "").rstrip("/")
 
-QR_EXPIRY_MINUTES = 5
+QR_EXPIRY_MINUTES = 15
 
 PLAN_DURATIONS: dict[str, int] = {
     "1_day": 1,

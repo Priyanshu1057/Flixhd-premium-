@@ -57,9 +57,6 @@ class _HealthHandler(BaseHTTPRequestHandler):
 
 
 def start_health_server():
-    # Only bind on Render (where PORT is injected and RENDER=true is set)
-    if not os.environ.get("RENDER"):
-        return
     port = int(os.environ.get("PORT", 8080))
     try:
         server = HTTPServer(("0.0.0.0", port), _HealthHandler)

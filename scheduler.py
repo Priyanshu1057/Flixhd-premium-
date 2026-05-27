@@ -2,10 +2,14 @@
 Background scheduler:
   - Sends subscription expiry reminders (every 12 hours)
   - Expires stale QR codes and notifies users (every 5 minutes)
+  - Self-pings the service URL every 14 minutes to prevent free-tier sleep
 """
+import asyncio
 import logging
+import urllib.request
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from database import get_expiring_orders, mark_reminder_sent, expire_stale_qr_orders
+from config import SELF_PING_URL
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +76,24 @@ def start_scheduler(bot):
         except Exception as e:
             logger.error(f"QR expiry job error: {e}")
 
+    async def self_ping():
+        url = SELF_PING_URL
+        if not url:
+            return
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: urllib.request.urlopen(url, timeout=10),
+            )
+            logger.info(f"Self-ping OK → {url}")
+        except Exception as e:
+            logger.warning(f"Self-ping failed: {e}")
+
     scheduler.add_job(send_reminders, "interval", hours=12, id="subscription_reminders")
     scheduler.add_job(expire_qr_codes, "interval", minutes=5, id="qr_expiry")
+    if SELF_PING_URL:
+        scheduler.add_job(self_ping, "interval", minutes=14, id="self_ping")
+        logger.info(f"Self-ping scheduled every 14 min → {SELF_PING_URL}")
     scheduler.start()
     logger.info("Scheduler started — reminders every 12h, QR expiry check every 5min.")
