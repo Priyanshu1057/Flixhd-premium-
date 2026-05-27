@@ -7,8 +7,9 @@ services:
     startCommand: python bot.py
     healthCheckPath: /
     plan: free
-    pythonVersion: "3.11.0"
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: MONGODB_URI
