@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: telegram-subscription-bot
+    runtime: python
+    rootDir: bot
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    healthCheckPath: /health
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: MONGODB_URI
+        sync: false
+      - key: ADMIN_CHANNEL_ID
+        sync: false
+      - key: ADMIN_USER_ID
+        sync: false
+      - key: UPI_ID
+        sync: false
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: LOG_CHANNEL_ID
+        sync: false
+      - key: SELF_PING_URL
+        sync: false
