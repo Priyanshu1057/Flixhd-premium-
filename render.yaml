@@ -2,6 +2,7 @@ services:
   - type: web
     name: flixhd-premium-bot
     runtime: python
+    pythonVersion: "3.11.11"
     rootDir: bot
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
