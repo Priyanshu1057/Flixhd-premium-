@@ -70,4 +70,4 @@ SERVICES["adult"] = {
     },
 }
 
-SUPPORT_USERNAME = "YourSupportUsername"  # Change to your support @username
+SUPPORT_USERNAME = "FilmyflixHD_Supportbot"

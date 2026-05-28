@@ -183,6 +183,9 @@ async def send_payment_qr(
         photo=InputFile(qr_buf, filename="payment_qr.png"),
         caption=caption,
         parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("❌ Cancel Order", callback_data="cancel_order")]
+        ]),
     )
 
     PENDING_ORDERS[user.id] = {
@@ -200,9 +203,20 @@ async def send_payment_qr(
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     try:
-        await upsert_user(user.id, user.username or "", user.full_name)
+        is_new = await upsert_user(user.id, user.username or "", user.full_name)
     except Exception as e:
         logger.error(f"DB error saving user: {e}")
+        is_new = False
+
+    if is_new:
+        uname = f"@{user.username}" if user.username else "no username"
+        await log_to_channel(
+            context.bot,
+            f"🆕 <b>New User Joined</b>\n"
+            f"👤 <b>Name:</b> {user.full_name}\n"
+            f"🔗 <b>Username:</b> {uname}\n"
+            f"🆔 <b>ID:</b> <code>{user.id}</code>",
+        )
 
     keyboard = [
         [InlineKeyboardButton(info["name"], callback_data=f"service:{key}")]
@@ -265,6 +279,7 @@ async def select_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
             label = f"◉ {plan['label']} — ₹{final_price}"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"plan:{plan_key}")])
     keyboard.append([InlineKeyboardButton("⬅️ ʙᴀᴄᴋ", callback_data="back")])
+    keyboard.append([InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ", callback_data="cancel_order")])
 
     # Build existing-subscription notice (shown on all service screens)
     existing_notice = ""
@@ -300,6 +315,7 @@ async def select_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
             for b in bots
         ]
         bot_keyboard.append([InlineKeyboardButton("⬅️ ʙᴀᴄᴋ", callback_data="back")])
+        bot_keyboard.append([InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ", callback_data="cancel_order")])
         await query.edit_message_text(
             f"<b>{escape(service['name'])}</b>\n\n"
             f"🎯 ᴄʜᴏᴏsᴇ ᴛʜᴇ ʙᴏᴛ ʏᴏᴜ ᴡᴀɴᴛ ᴀᴄᴄᴇss ᴛᴏ 👇{existing_notice}",
@@ -357,6 +373,7 @@ async def select_bot(update: Update, context: ContextTypes.DEFAULT_TYPE):
             label = f"◉ {plan['label']} — ₹{final_price}"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"plan:{plan_key}")])
     keyboard.append([InlineKeyboardButton("⬅️ ʙᴀᴄᴋ", callback_data="back_to_bot")])
+    keyboard.append([InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ", callback_data="cancel_order")])
 
     await query.edit_message_text(
         f"<b>{escape(service['name'])}</b>\n"
@@ -382,6 +399,7 @@ async def back_to_bot_selection(update: Update, context: ContextTypes.DEFAULT_TY
         for b in bots
     ]
     bot_keyboard.append([InlineKeyboardButton("⬅️ ʙᴀᴄᴋ", callback_data="back")])
+    bot_keyboard.append([InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ", callback_data="cancel_order")])
     await query.edit_message_text(
         f"<b>{escape(service['name'])}</b>\n\n"
         "🎯 ᴄʜᴏᴏsᴇ ᴛʜᴇ ʙᴏᴛ ʏᴏᴜ ᴡᴀɴᴛ ᴀᴄᴄᴇss ᴛᴏ 👇",
@@ -400,6 +418,7 @@ async def back_to_services(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for key, info in SERVICES.items()
     ]
     keyboard.append([InlineKeyboardButton("ℹ️ ʜᴏᴡ ɪᴛ ᴡᴏʀᴋs", callback_data="help")])
+    keyboard.append([InlineKeyboardButton("❌ ᴄᴀɴᴄᴇʟ", callback_data="cancel_order")])
 
     await query.edit_message_text(
         "🎖️ sᴇʟᴇᴄᴛ ʏᴏᴜʀ ᴘʟᴀɴ 👇",
@@ -427,7 +446,8 @@ async def select_plan(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Type your coupon code below, or tap *Skip* to continue without one.",
         parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("⏭ Skip", callback_data="skip_coupon")]
+            [InlineKeyboardButton("⏭ Skip", callback_data="skip_coupon")],
+            [InlineKeyboardButton("❌ Cancel", callback_data="cancel_order")],
         ]),
     )
     return AWAITING_COUPON
@@ -601,6 +621,25 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     PENDING_ORDERS.pop(update.effective_user.id, None)
     await update.message.reply_text("❌ Order cancelled. Type /start to begin again.")
     return ConversationHandler.END
+
+
+async def cancel_order_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the ❌ Cancel Order inline button at any stage."""
+    query = update.callback_query
+    await query.answer()
+    PENDING_ORDERS.pop(update.effective_user.id, None)
+    context.user_data.clear()
+    try:
+        await query.edit_message_text("❌ Order cancelled. Type /start to begin again.")
+    except Exception:
+        await query.message.reply_text("❌ Order cancelled. Type /start to begin again.")
+    return ConversationHandler.END
+
+
+async def handle_stale_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Catch-all for callback buttons that no longer belong to the current flow."""
+    query = update.callback_query
+    await query.answer("⚠️ This menu is no longer active. Use /start.", show_alert=True)
 
 
 async def unexpected_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -969,7 +1008,7 @@ async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         service = order.get("service_name", "?")
         plan = order.get("plan_label", "?")
         amount = order.get("amount", "?")
-        days_left = (order["subscription_end"].replace(tzinfo=None) - __import__("datetime").datetime.utcnow()).days + 1
+        days_left = (order["subscription_end"].replace(tzinfo=None) - datetime.utcnow()).days + 1
         ending_lines.append(
             f"• {escape(str(username))} — {escape(service)} {escape(plan)}\n"
             f"  ₹{amount} | Ends {end_date} ({days_left}d left)"
@@ -1105,6 +1144,43 @@ async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ---------------------------------------------------------------------------
 # Admin commands
 # ---------------------------------------------------------------------------
+
+
+async def dm_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send a direct message to any user by their Telegram ID.
+    Usage: /dm <user_id> <message text>
+    """
+    if not is_admin(update.effective_user.id):
+        await update.message.reply_text("⛔ Not authorised.")
+        return
+
+    args = context.args
+    if not args or len(args) < 2:
+        await update.message.reply_text(
+            "📩 <b>Usage:</b> /dm &lt;user_id&gt; &lt;message&gt;\n\n"
+            "Example: <code>/dm 123456789 Your subscription is ready!</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    try:
+        target_id = int(args[0])
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID — must be a number.")
+        return
+
+    text = " ".join(args[1:])
+    try:
+        await context.bot.send_message(
+            chat_id=target_id,
+            text=f"📩 <b>Message from FlixHD Admin:</b>\n\n{text}",
+            parse_mode="HTML",
+        )
+        await update.message.reply_text(
+            f"✅ Message delivered to <code>{target_id}</code>.", parse_mode="HTML"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Failed to send: {e}")
 
 async def add_premium_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Manually add premium for flexible duration.
@@ -1388,35 +1464,46 @@ def main():
         .build()
     )
 
+    _cancel_btn = CallbackQueryHandler(cancel_order_callback, pattern="^cancel_order$")
+    _stale_btn  = CallbackQueryHandler(handle_stale_callback)
+
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
             SELECT_SERVICE: [
                 CallbackQueryHandler(select_service, pattern="^service:"),
                 CallbackQueryHandler(select_service, pattern="^help$"),
+                _cancel_btn,
             ],
             SELECT_BOT: [
                 CallbackQueryHandler(select_bot, pattern="^bot:"),
                 CallbackQueryHandler(back_to_services, pattern="^back$"),
+                _cancel_btn,
             ],
             SELECT_PLAN: [
                 CallbackQueryHandler(select_plan, pattern="^plan:"),
                 CallbackQueryHandler(back_to_bot_selection, pattern="^back_to_bot$"),
                 CallbackQueryHandler(back_to_services, pattern="^back$"),
+                _cancel_btn,
             ],
             AWAITING_COUPON: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_coupon_input),
                 CallbackQueryHandler(skip_coupon, pattern="^skip_coupon$"),
                 CommandHandler("skip", skip_coupon_command),
+                _cancel_btn,
             ],
             AWAITING_SCREENSHOT: [
                 MessageHandler(filters.PHOTO, receive_screenshot),
+                _cancel_btn,
+                _stale_btn,
             ],
         },
         fallbacks=[
             CommandHandler("start", start),
             CommandHandler("cancel", cancel),
+            _cancel_btn,
             MessageHandler(filters.TEXT & ~filters.COMMAND, unexpected_text),
+            _stale_btn,
         ],
         per_user=True,
         per_chat=True,
@@ -1434,15 +1521,19 @@ def main():
     app.add_handler(CommandHandler("help",    help_command))
     app.add_handler(CommandHandler("support", support_command))
 
-    # Admin commands
-    app.add_handler(CommandHandler("discount",  discount_command))
-    app.add_handler(CommandHandler("coupon",    coupon_command))
-    app.add_handler(CommandHandler("broadcast", broadcast_command))
-    app.add_handler(CommandHandler("report",    report_command))
-    app.add_handler(CommandHandler("add_premium", add_premium_command))
-    app.add_handler(CommandHandler("adduser",     adduser_command))
-    app.add_handler(CommandHandler("checkuser", checkuser_command))
-    app.add_handler(CommandHandler("pending",   pending_command))
+    # Admin commands — group -1 so they fire before the ConversationHandler
+    for _cmd, _hdl in [
+        ("discount",    discount_command),
+        ("coupon",      coupon_command),
+        ("broadcast",   broadcast_command),
+        ("report",      report_command),
+        ("add_premium", add_premium_command),
+        ("adduser",     adduser_command),
+        ("checkuser",   checkuser_command),
+        ("pending",     pending_command),
+        ("dm",          dm_command),
+    ]:
+        app.add_handler(CommandHandler(_cmd, _hdl), group=-1)
 
     app.add_error_handler(error_handler)
 

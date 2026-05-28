@@ -136,8 +136,9 @@ async def mark_reminder_sent(order_id: str, days: int):
 # Users
 # ---------------------------------------------------------------------------
 
-async def upsert_user(user_id: int, username: str, full_name: str):
-    await users_col.update_one(
+async def upsert_user(user_id: int, username: str, full_name: str) -> bool:
+    """Returns True if this is a brand-new user, False if already existed."""
+    result = await users_col.update_one(
         {"user_id": user_id},
         {
             "$set": {
@@ -149,6 +150,7 @@ async def upsert_user(user_id: int, username: str, full_name: str):
         },
         upsert=True,
     )
+    return result.upserted_id is not None
 
 
 async def get_all_user_ids() -> list[int]:
